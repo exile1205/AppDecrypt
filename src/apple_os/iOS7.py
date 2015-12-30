@@ -26,9 +26,9 @@ class iDeviceWorker(Worker):
             bPlist = ''.join(stdout.read())
        	    self._ssh.close()
             PlistDict = biplist.readPlistFromString(bPlist)
-	    self.itemName = PlistDict[u'itemName']
+            self.itemName = PlistDict[u'itemName']
             self.itemId = PlistDict['itemId']
-	    self.genre =  PlistDict['genre']
+            self.genre =  PlistDict['genre']
         except:
 	    print "Fail, Maybe it is a Built-in App without metadata."
             find_com = 'find /var/mobile/Applications/%s/*.app'% self.__long_hex_key
@@ -59,10 +59,6 @@ class iDeviceWorker(Worker):
         filebinPath = ''.join(stdout.read()).rstrip()
         stdin, stdout, stderr = self._ssh.exec_command("file '%s'" % filebinPath)
         checkfile = ''.join(stdout.read())
-	#getbinPath = "cd /var/mobile/Applications/%s/ && echo $(pwd)"  % self.__long_hex_key
-	#stdin, stdout, stderr = self._ssh.exec_command(getbinPath)
-        #binPath = ''.join(stdout.read()).rstrip()
-	#binPath = binPath + "/%s.app/%s" %(exetuable_name, exetuable_name)
 	binPath = filebinPath
 	if(" " in filebinPath):
 		binPath = filebinPath.replace(" ","\ ")     
@@ -76,7 +72,8 @@ class iDeviceWorker(Worker):
     def getOriginalBin(self):
         self._ssh.connect(**self._connectArgs)
         sftp = self._ssh.open_sftp()
-        target_path = '%s%s' % (self.targetDir, self.itemId)
+        original_target_path = self.targetDir + 'binary/'
+        target_path = '%s%s' % (original_target_path, self.itemId)
 	#if not os.path.exists(target_path): os.makedir(target_path)
       
 	sftp.get(self.file_binary_path,target_path) 
@@ -94,7 +91,7 @@ class iDeviceWorker(Worker):
 
     def checkDecryptedBin(self):
 	binary_filename = self.binary_path.split('/')[-1]
-	print "checking DeBin"
+	print "checking DecryptBinary"
 	print binary_filename
 	if ("\ " in binary_filename):
 		self._ssh.connect(**self._connectArgs)
@@ -107,16 +104,25 @@ class iDeviceWorker(Worker):
 	else:
 		self.binary_filename = binary_filename
     def getDeBin(self):
-	print "hello"
-	self._ssh.connect(**self._connectArgs)
-        sftp = self._ssh.open_sftp()
+    self._ssh.connect(**self._connectArgs)
+    sftp = self._ssh.open_sftp()
 	
 	de_path = '%s.decrypted' % self.binary_filename
 	print de_path
-        target_path = '%sdecrypted/%s' % (self.targetDir,self.itemId)	
+    target_path = '%s%s' % (self.targetDir, self.itemId)
+    # target_path = '%sdecrypted/%s' % (self.targetDir,self.itemId)	
+    
 	sftp.get(de_path,target_path) 
-        sftp.close()
-        self._ssh.close()
+    sftp.close()
+    self._ssh.close()
+    armv7CopyPath = self.targetDir + 'armv7/' + self.itemId + '.armv7' 
+    shutil.copy(target_path, armv7CopyPath)
+    
+    command = "arm-apple-darwin11-lipo -thin armv7 " + self.itemId + " -output armv7/" + self.itemId + ".armv7"
+    subprocess.call(command, shell=True)
+    
+    move_path = self.targetDir + 'decrypted/' + self.itemId
+    shutil.move(target_path, move_path)
 	print "Get decrypted %s succeed" % self.itemName
         return target_path
 
@@ -171,4 +177,7 @@ class LinuxWorker(object):
         pList = open('%s.plist.json' % self.binpath, 'w')
         pList.write(content)
        	pList.close()
+        jsonPath = '%s.plist.json' % self.binpath
+        jsonNewPath = self.targetDir + 'json/' + '%s.plist.json' % self.binpath
+        shutil.move(jsonPath, jsonNewPath)
 	print 'json done'
