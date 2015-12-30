@@ -1,0 +1,179 @@
+from Utils import Worker
+
+from jinja2 import Environment, FileSystemLoader
+import biplist, paramiko, re, os, json, shutil
+
+class iDeviceWorker(Worker):
+    itemId = None
+    binary_path = None
+    is_binary_exists = None
+    genre = None
+    targetDir = "./"
+    def assignLongHexKey(self, long_hex_key):
+        self.__long_hex_key = long_hex_key
+
+    def setItemId_and_getPlistDict(self):
+        try:
+            self._ssh.connect(**self._connectArgs)
+            cmd = 'cat /var/mobile/Applications/%s/iTunesMetadata.plist' % self.__long_hex_key
+            stdin, stdout, stderr = self._ssh.exec_command(cmd)
+	    #bPlist = stdout.read()
+	    #print bPlist
+            bPlist = ''.join(stdout.read())
+            self._ssh.close()
+            PlistDict = biplist.readPlistFromString(bPlist)
+	    #print PlistDict
+	    self.itemName = PlistDict[u'itemName']
+            self.itemId = PlistDict['itemId']
+	    self.genre =  PlistDict['genre']
+        except:
+	    print"Fail"
+            PlistDict = {}     
+        return PlistDict
+
+    def findBin(self):
+        if not self.__long_hex_key:
+            return -1
+        filetype = ['Mach-O fat file with 2 architectures', 'Mach-O executable acorn']
+        #filetype = ['Mach-O fat file with 2 architectures']
+        self._ssh.connect(**self._connectArgs)
+
+        cmd = 'cat /var/mobile/Applications/%s/*.app/Info.plist'
+        stdin, stdout, stderr = self._ssh.exec_command(cmd % self.__long_hex_key)
+        bPlist = ''.join(stdout.read())
+        PlistDict = biplist.readPlistFromString(bPlist)
+        exetuable_name = PlistDict['CFBundleExecutable']
+        getbinPath = "cd /var/mobile/Applications/%s/*.app/ && echo $(pwd)/%s" % (self.__long_hex_key, exetuable_name)
+        stdin, stdout, stderr = self._ssh.exec_command(getbinPath)
+        binPath = ''.join(stdout.read()).rstrip()
+        stdin, stdout, stderr = self._ssh.exec_command("file '%s'" % binPath)
+        stdout = ''.join(stdout.read())
+        for i in filetype:
+            if i in stdout:
+                self.binary_path = binPath
+                self.is_binary_exists = True
+        self._ssh.close()
+
+    def dumpDecryptedBinary(self, offset, cryptoff, cryptsize, vmaddr, addr):
+	#print self.binary_path + '/bp'
+        binary_dir = '/'.join(self.binary_path.split('/')[:-1])
+        #print binary_dir + '/bd'
+	binary_filename = self.binary_path.split('/')[-1]
+        #print binary_filename + '/bf'
+	# Calculate required value for GNU Debugger to decrypt
+        entry_point = addr
+        start = int(cryptoff)+int(vmaddr,16)
+        end = hex(start+int(cryptsize))
+        start = hex(start)
+
+        # Generate the GNU Debugger script to run on iPad gdb
+        env = Environment(loader=FileSystemLoader(os.path.dirname(__file__)))
+        template = env.get_template('gdbwork.tpl')
+        gdb_content = template.render(entry_point=entry_point,start=start,end=end,binaryname=self.itemId)
+        gdbscript = open('./gdbwork.gdb', 'w')
+        gdbscript.write(gdb_content)
+        gdbscript.close()
+    
+        # Space issue, something wrong with gdb script 
+        # The Ref goes here, took me hours..... MD5 confirmed.
+        # http://hackulo.us/wiki/DecryptApp, /echo -e "handle all nostop"
+        clean_list = ['%s.dec' % self.itemId, '%s/gdbwork.gdb' % binary_dir]
+	print "next clean"
+	print clean_list
+        try:
+            self._ssh.connect(**self._connectArgs)
+            sftp = self._ssh.open_sftp()
+            sftp.put('./gdbwork.gdb', '%s/gdbwork.gdb' % binary_dir)
+            os.remove('./gdbwork.gdb')
+            gdb_command = 'gdb -q -x "%s" -batch "%s"' % ('%s/gdbwork.gdb' % binary_dir, self.binary_path)
+            print gdb_command
+	    #dec_command = '/tmp root# DYLD_INSERT_LIBRARIES=dumpdecrypted.dylib /var/mobile/Applications/%s/%s.app/%s mach-o decryption dumper'%()
+	    stdin, stdout, stderr = self._ssh.exec_command(gdb_command)
+	    stdout = ''.join(stdout.read())
+            # Pay more attention when iOS 5 device is backed!
+	    decpart_path = '%s%s.decpart' % (self.targetDir, self.itemId)
+            sftp.get('%s.dec' % self.itemId, decpart_path)
+	    print 'ph'
+        except:
+            decpart_path = None
+            clean_list.pop(0)
+            raise
+
+        map(sftp.remove, clean_list)
+        sftp.close()
+        self._ssh.close()
+        return decpart_path
+
+    def getOriginalBin(self):
+        self._ssh.connect(**self._connectArgs)
+        sftp = self._ssh.open_sftp()
+        target_path = '%s%s' % (self.targetDir, self.itemId)
+	#if not os.path.exists(target_path): os.makedir(target_path)       
+	sftp.get(self.binary_path,target_path) 
+	
+        sftp.close()
+        self._ssh.close()
+	#print "get OriginalBin succeed"
+        return target_path
+
+    def doDecrypted (self):
+	#print "get in"
+	self._ssh.connect(**self._connectArgs)
+        sftp = self._ssh.open_sftp()
+        dec_command = 'DYLD_INSERT_LIBRARIES=dumpdecrypted.dylib %s mach-o decryption dumper'%(self.binary_path)
+	stdin, stdout, stderr = self._ssh.exec_command(dec_command)
+	stdout = ''.join(stdout.read())
+	print "Decrypted Done"
+	self._ssh.close()	
+	
+    def getDeBin(self):
+	self._ssh.connect(**self._connectArgs)
+        sftp = self._ssh.open_sftp()
+	binary_filename = self.binary_path.split('/')[-1]
+        target_path = '%sdecr/%s_%s' % (self.targetDir,self.genre,self.itemId)
+	de_path = '%s.decrypted' % binary_filename	
+	sftp.get(de_path,target_path) 
+        sftp.close()
+        self._ssh.close()
+	print "Get decrypted %s succeed" % self.itemName
+        return target_path
+
+class LinuxWorker(object):
+
+    def __init__(self, binpath):
+        self.binpath = binpath
+
+    def doDD(self, offset, cryptoff, cryptsize, vmaddr, addr):
+        seek = int(offset)+int(cryptoff)
+        count = cryptsize
+        cmd = 'dd bs=1 conv=notrunc if="%s.decpart" of="%s" skip=0 seek=%s count=%s' % (self.binpath, self.binpath, seek, count)
+        if os.system(cmd) == 0:
+            os.remove('%s.decpart' % self.binpath)
+            return self.binpath 
+    
+    def getBinInfo(self):
+        i = self.binpath
+        cmd = 'arm-apple-darwin11-otool -f "%s" | grep -A 2 "cpusubtype 9" && arm-apple-darwin11-lipo -thin armv7 "%s" -output "%s.armv7" && arm-apple-darwin11-otool -l "%s.armv7" | grep LC_ENCRYPTION -A 4 | grep crypt && arm-apple-darwin11-otool -l "%s.armv7" | grep __TEXT -A 3 -B 1 | head -12 | grep addr && rm "%s.armv7"' % (i,i,i,i,i,i)
+        stdout = [i for i in os.popen(cmd)]
+        
+        #Transform to a dictionary as **kargs purpose
+        info = {
+            'offset': None,
+            'cryptoff': None,
+            'cryptsize': None,
+            'vmaddr': None,
+            'addr': None,
+        }
+        
+        for i in info.keys():
+            for k in stdout:
+                if re.search('^\s{0,}%s' % i, k):
+                    info[i] = k.replace(i,"").replace(" ","").rstrip()
+        return info
+
+    def getPair(self, PlistDict):
+        self.itemID = str(PlistDict['itemId'])
+        content = json.dumps(PlistDict)
+        pList = open('%s.plist.json' % self.binpath, 'w')
+        pList.write(content)
+        pList.close()
