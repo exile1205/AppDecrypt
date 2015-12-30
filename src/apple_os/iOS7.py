@@ -119,26 +119,26 @@ class iDeviceWorker(Worker):
             self.binary_filename = binary_filename
 
     def getDeBin(self):
-    self._ssh.connect(**self._connectArgs)
-    sftp = self._ssh.open_sftp()
+        self._ssh.connect(**self._connectArgs)
+        sftp = self._ssh.open_sftp()
 
         de_path = '%s.decrypted' % self.binary_filename
         print de_path
-    target_path = '%s%s' % (self.targetDir, self.itemId)
+        target_path = '%s%s' % (self.targetDir, self.itemId)
     # target_path = '%sdecrypted/%s' % (self.targetDir,self.itemId)
 
         sftp.get(de_path, target_path)
-    sftp.close()
-    self._ssh.close()
-    armv7CopyPath = self.targetDir + 'armv7/' + self.itemId + '.armv7'
-    shutil.copy(target_path, armv7CopyPath)
+        sftp.close()
+        self._ssh.close()
+        armv7CopyPath = self.targetDir + 'armv7/' + self.itemId + '.armv7'
+        shutil.copy(target_path, armv7CopyPath)
 
-    command = "arm-apple-darwin11-lipo -thin armv7 " + \
+        command = "arm-apple-darwin11-lipo -thin armv7 " + \
         self.itemId + " -output armv7/" + self.itemId + ".armv7"
-    subprocess.call(command, shell=True)
+        subprocess.call(command, shell=True)
 
-    move_path = self.targetDir + 'decrypted/' + self.itemId
-    shutil.move(target_path, move_path)
+        move_path = self.targetDir + 'decrypted/' + self.itemId
+        shutil.move(target_path, move_path)
         print "Get decrypted %s succeed" % self.itemName
         return target_path
 
