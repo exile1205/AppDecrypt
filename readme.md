@@ -25,7 +25,7 @@ Using virtualenv is a good idea since it creates separate and isolated Python en
 
 A jailbroken iOS device(iPod Touch, iPhone, iPad) which install Cydia, terminal, openssh.
 
-After installing, you can access iDevice with ssh portal. Then putting the [dumpdecrypted](https://github.com/stefanesser/dumpdecrypted) into home directory from iDevice
+After installing, you can access iDevice with ssh portal. Then put the [dumpdecrypted](https://github.com/stefanesser/dumpdecrypted) into home directory from iDevice
 
 ##### USB Connect
 
