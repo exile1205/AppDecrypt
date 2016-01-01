@@ -16,7 +16,8 @@ class Worker(object):
 class AppDiscover(Worker):
     def getHexList(self):
         self._ssh.connect(**self._connectArgs)
-        cmd = "ls /var/mobile/Applications"
+	# cmd = "ls /var/mobile/Applications"  for iOS5,7      
+	cmd = "ls /var/mobile/Containers/Bundle/Application"
         stdin, stdout, stderr = self._ssh.exec_command(cmd)
         list = [i.rstrip() for i in stdout.readlines()]
         self._ssh.close()

@@ -1,4 +1,4 @@
-iPad = {
+iDevice = {
     'username': 'root',
     'password': 'soslab',
     'hostname': 'localhost',

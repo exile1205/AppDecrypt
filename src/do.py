@@ -1,9 +1,9 @@
 from apple_os.Utils import AppDiscover
-from apple_os import iOS7
+from apple_os import iOS9
 import os, ftplib, json
 import settings
 
-app = AppDiscover(**settings.iPad)
+app = AppDiscover(**settings.iDevice)
 
 def writeIntoDownloadLog(PLIST):
     itemId = PLIST[u'itemId']
@@ -34,11 +34,17 @@ def uploadFileToServer(PLIST_FILE_PATH, EXECUTABLE_FILE_PATH, PlistDict):
     os.remove(PLIST_FILE_PATH)
     os.remove(EXECUTABLE_FILE_PATH)
     writeIntoDownloadLog(PlistDict)
-    
+def createOutputFolder():
+    folderList = ['armv7', 'armv7s', 'binary', 'decrypted', 'json']
+    for folder in folderList:
+	checkingFolder = settings.output_dir + folder
+        if not os.path.exists(checkingFolder):
+	    os.makedirs(checkingFolder)
+	    print "The folder %s is created" % checkingFolder
 def decrypt(hex):
     print "---------------------------------------------------"
     print " Decrypting app %s" % hex
-    ios_worker = iOS7.iDeviceWorker(**settings.iPad)
+    ios_worker = iOS9.iDeviceWorker(**settings.iDevice)
     ios_worker.assignLongHexKey(hex)
     PlistDict = ios_worker.setItemId_and_getPlistDict()
     print "The app is %s" % PlistDict[u'itemName']
@@ -46,29 +52,31 @@ def decrypt(hex):
     if ios_worker.binary_path is not None:
         ios_worker.targetDir = settings.output_dir
         localBinPath = ios_worker.getOriginalBin()
-        linux_worker = iOS7.LinuxWorker(localBinPath)
+        linux_worker = iOS9.LinuxWorker(localBinPath)
 	print "%s Decrypting Start"% PlistDict[u'itemName']
 	ios_worker.doDecrypted() 
 	ios_worker.checkDecryptedBin()       
 	ios_worker.getDeBin()
-	print "Clear decrypted file in iDevice"
+	print "Clear decrypted file in iDevice."
 	ios_worker.rmDeBin()
-	print "Get metadata as json file."
+	print "Retrieve metadata as json file."
         #if decpart_path is not None:
             #bin_path = linux_worker.doDD(**dec_dict)
 	#print PlistDict
         linux_worker.getPair(PlistDict)
-        uploadFileToServer('%s.plist.json' % bin_path, bin_path, PlistDict)
+	print "%s has been finished."% PlistDict[u'itemName']
+        # uploadFileToServer('%s.plist.json' % bin_path, bin_path, PlistDict)
 	#print "Uploaded"
         #else:
         # print "Decryption failed on %s" % hex
     else:
-        print "App skiped: %s,because it is not 'Mach-O fat file with 2 architectures' or 'Mach-O executable acorn'" % hex    
+        print "App skiped: %s,because it is not 'Mach-O fat file with 2 architectures' or 'Mach-O executable acorn'." % hex    
 
 if __name__ == "__main__":
-    app = AppDiscover(**settings.iPad)
-    for i in app.getHexList():
-        try:
+    app = AppDiscover(**settings.iDevice)
+    createOutputFolder();
+    for i in app.getHexList():       
+	try:
             decrypt(i)
             #print "---------------------------------------------------"
         except KeyboardInterrupt:
