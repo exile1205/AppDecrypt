@@ -134,11 +134,10 @@ class iDeviceWorker(Worker):
         shutil.copy(target_path, armv7_target_path)
 	
 	print 'Trying to thin the decrypted file to armv7 and armv7s.'
-        command_armv7 = "arm-apple-darwin11-lipo -thin armv7 " + str(self.itemId) + " -output armv7/" + str(self.itemId) + ".armv7"
-
+        command_armv7 = "arm-apple-darwin11-lipo -thin armv7 " + target_path + " -output "  + self.targetDir + "armv7/" + str(self.itemId) + ".armv7"
         subprocess.call(command_armv7, shell=True)
 
-	command_armv7s = "arm-apple-darwin11-lipo -thin armv7s " + str(self.itemId) + " -output armv7s/" + str(self.itemId) + ".armv7s"
+	command_armv7s = "arm-apple-darwin11-lipo -thin armv7s " + target_path + " -output "  + self.targetDir + "armv7s/" + str(self.itemId) + ".armv7s"
 
         subprocess.call(command_armv7s, shell=True)
 

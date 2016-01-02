@@ -1,8 +1,8 @@
 iDevice = {
     'username': 'root',
     'password': 'soslab',
-    'hostname': 'localhost',
-    'port': 2222,
+    'hostname': '192.168.0.106',
+    'port': 22,
 }
 
 ftp = {
